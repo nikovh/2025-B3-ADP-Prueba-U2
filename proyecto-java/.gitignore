@@ -1,0 +1,24 @@
+# Archivos de log
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Directorio de salida de la compilación de Maven
+target/
+
+# Archivos de configuración de IDEs
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+*.iws
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de dependencias locales de Maven
+.mvn/
