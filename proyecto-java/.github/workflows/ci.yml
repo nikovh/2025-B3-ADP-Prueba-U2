@@ -22,4 +22,12 @@ jobs:
         cache: maven
 
     - name: Build and test with Maven
+      working-directory: ./proyecto-java
       run: mvn -B package
+
+    - name: Upload test reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: surefire-reports
+        path: proyecto-java/target/surefire-reports/
