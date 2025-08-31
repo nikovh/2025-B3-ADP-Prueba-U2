@@ -58,133 +58,147 @@ jobs:
 
           # -------- JUnit (Surefire) ----------
           tests=failures=errors=skipped=0; total_time=0.0
-          for f in glob.glob(f'{target}/surefire-reports/*.xml'):
+          for f in glob.glob(f'{target}/surefire-reports/TEST-*.xml'):
               try:
                   root = ET.parse(f).getroot()
-                  suites = [root] if root.tag=='testsuite' else root.findall('testsuite')
-                  for s in suites:
-                      tests     += int(s.attrib.get('tests',0))
-                      failures  += int(s.attrib.get('failures',0))
-                      errors    += int(s.attrib.get('errors',0))
-                      skipped   += int(s.attrib.get('skipped',0))
-                      total_time+= float(s.attrib.get('time',0))
-              except Exception:
-                  pass
+                  tests     += int(root.attrib.get('tests',0))
+                  failures  += int(root.attrib.get('failures',0))
+                  errors    += int(root.attrib.get('errors',0))
+                  skipped   += int(root.attrib.get('skipped',0))
+                  total_time+= float(root.attrib.get('time',0))
+              except Exception: pass
 
-          # -------- Cucumber (plugin o runner) ----------
-          cuc_files = [
-              f'{target}/cucumber-reports/Cucumber.json',
-              f'{target}/cucumber-reports/cucumber.json',
-              f'{target}/cucumber.json',
-          ]
-          cj = next((p for p in cuc_files if os.path.isfile(p)), None)
+          # -------- Cucumber (Generado por el plugin de reporting) ----------
           cuc = dict(features=0, sc_total=0, sc_ok=0, sc_ko=0, st_total=0, st_ok=0, st_ko=0, st_sk=0)
-          if cj:
+          cj = f'{target}/cucumber-reports/Cucumber.json'
+          if os.path.isfile(cj):
               try:
                   arr = json.load(open(cj, encoding='utf-8'))
-                  # Si el plugin genera objeto con key "features", normalizamos a lista
-                  if isinstance(arr, dict) and 'features' in arr:
-                      arr = arr['features']
-                  if not isinstance(arr, list):
-                      arr = [arr]
                   cuc['features'] = len(arr)
                   for feat in arr:
                       for el in feat.get('elements', []):
                           if el.get('type')=='scenario':
                               cuc['sc_total'] += 1
-                              step_stats = [ (st.get('result') or {}).get('status') for st in el.get('steps',[]) ]
+                              step_stats = [ st.get('result', {}).get('status') for st in el.get('steps',[]) ]
                               if 'failed' in step_stats: cuc['sc_ko'] += 1
                               else:                      cuc['sc_ok'] += 1
-                              for st in el.get('steps', []):
-                                  cuc['st_total'] += 1
-                                  s = (st.get('result') or {}).get('status')
+                              cuc['st_total'] += len(el.get('steps', []))
+                              for s in step_stats:
                                   if s=='passed': cuc['st_ok'] += 1
                                   elif s=='failed': cuc['st_ko'] += 1
                                   else: cuc['st_sk'] += 1
-              except Exception:
-                  pass
+              except Exception: pass
 
-          # -------- k6 (métricas estándar) ----------
-          k6 = dict(reqs='-', tps='-', p95='-', p99='-', err='-', vus_max='-')
+          # -------- k6 (CORREGIDO PARA LEER MÉTRICAS DE SIMULACIÓN) ----------
+          k6 = dict(reqs='-', tps=0.0, p95=0.0, p99=0.0, err_rate=0.0, vus_max='-')
           ks_path = f'{target}/k6-summary.json'
           if os.path.isfile(ks_path):
               try:
                   ks = json.load(open(ks_path, encoding='utf-8'))
                   m  = ks.get('metrics', {})
-                  dur = m.get('http_req_duration', {})
-                  vals = dur.get('values') or {}
-                  percs = dur.get('percentiles') or {}
-                  def val(k): return vals.get(k) or percs.get(k)
-                  k6['p95'] = val('p(95)')
-                  k6['p99'] = val('p(99)')
-                  http_reqs = m.get('http_reqs', {})
-                  k6['reqs'] = int((http_reqs.get('count') or 0))
-                  dur_ms = (ks.get('state') or {}).get('testRunDurationMs') or 0
-                  k6['tps'] = round(k6['reqs']/ (dur_ms/1000.0), 2) if dur_ms else '-'
-                  k6['err'] = (m.get('http_req_failed') or {}).get('rate')
-                  vus_max = m.get('vus_max', {})
-                  k6['vus_max'] = (vus_max.get('values') or {}).get('value') or vus_max.get('value')
-              except Exception:
-                  pass
+                  
+                  login_trend = m.get('login_response_time', {})
+                  k6['p95'] = login_trend.get('p(95)', 0.0)
+                  k6['p99'] = login_trend.get('p(90)', 0.0)
+                  
+                  iterations_metric = m.get('iterations', {})
+                  k6['reqs'] = int(iterations_metric.get('count', 0))
+                  k6['tps'] = iterations_metric.get('rate', 0.0)
+                  
+                  checks_metric = m.get('checks', {})
+                  k6['err_rate'] = 1.0 - checks_metric.get('value', 1.0)
+                  
+                  k6['vus_max'] = m.get('vus_max', {}).get('value', '-')
+              except Exception: pass
 
+          # --- Generación del Dashboard (Versión sin emojis) ---
           lines = []
           lines.append('### Pipeline Dashboard')
           lines.append('')
-          lines.append('#### Pruebas funcionales (JUnit)')
-          lines.append(f'- Tests: {tests} | Failures: {failures} | Errors: {errors} | Skipped: {skipped} | Tiempo: {total_time:.2f}s')
+          lines.append('---')
+          lines.append('')
+          lines.append('#### Pruebas Funcionales (JUnit)')
+          lines.append(f'- **Tests Totales:** {tests} | **Fallidos:** {failures} | **Errores:** {errors} | **Saltados:** {skipped} | **Tiempo:** {total_time:.2f}s')
           lines.append('')
           lines.append('#### Cucumber (BDD)')
-          lines.append(f"- Features: {cuc['features']} | Escenarios: {cuc['sc_total']} (OK {cuc['sc_ok']}, Fallidos {cuc['sc_ko']})")
-          lines.append(f"- Steps: {cuc['st_total']} (OK {cuc['st_ok']}, Fallidos {cuc['st_ko']}, Skipped {cuc['st_sk']})")
+          lines.append(f"- **Features:** {cuc['features']} | **Escenarios:** {cuc['sc_total']} (OK: {cuc['sc_ok']}, Fallidos: {cuc['sc_ko']})")
+          lines.append(f"- **Steps:** {cuc['st_total']} (OK: {cuc['st_ok']}, Fallidos: {cuc['st_ko']}, Saltados: {cuc['st_sk']})")
           lines.append('')
-          lines.append('#### Performance (k6 - login)')
-          lines.append(f"- Peticiones: {k6['reqs']} | TPS aprox: {k6['tps']} req/s")
-          lines.append(f"- Latencia p95: {k6['p95']} ms | p99: {k6['p99']} ms")
-          lines.append(f"- Error rate: {k6['err']}")
-          lines.append(f"- VUs max: {k6['vus_max']}")
+          lines.append('#### Performance (k6 - simulación de login)')
+          lines.append(f"- **Iteraciones:** {k6['reqs']} | **TPS (aprox):** {k6['tps']:.2f} iter/s")
+          lines.append(f"- **Latencia p(95):** {k6['p95']:.2f} ms | **p(99):** {k6['p99']:.2f} ms")
+          lines.append(f"- **Tasa de Error:** {k6['err_rate']:.2%}")
+          lines.append(f"- **VUs Máximos:** {k6['vus_max']}")
           out = '\n'.join(lines)
+          
           with open(summary_file, 'a', encoding='utf-8') as f:
               f.write(out + '\n')
           PY
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: proyecto-java/target/surefire-reports/**
-          if-no-files-found: ignore
+        run: |
+          if [ -d "proyecto-java/target/surefire-reports" ]; then
+            echo "Uploading test reports..."
+            actions/upload-artifact@v4
+            with:
+              name: surefire-reports
+              path: proyecto-java/target/surefire-reports/**
+          else
+            echo "No test reports found."
+          fi
 
       - name: Upload Cucumber report (HTML + JSON)
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cucumber-reports
-          path: |
-            proyecto-java/target/cucumber-report.html
-            proyecto-java/target/cucumber.json
-            proyecto-java/target/cucumber-html-reports/**
-            proyecto-java/target/cucumber-reports/**
-          if-no-files-found: ignore
+        run: |
+          if [ -f "proyecto-java/target/cucumber-report.html" ] || [ -f "proyecto-java/target/cucumber.json" ]; then
+            echo "Uploading Cucumber reports..."
+            actions/upload-artifact@v4
+            with:
+              name: cucumber-reports
+              path: |
+                proyecto-java/target/cucumber-report.html
+                proyecto-java/target/cucumber.json
+                proyecto-java/target/cucumber-html-reports/**
+                proyecto-java/target/cucumber-reports/**
+          else
+            echo "No Cucumber reports found."
+          fi
 
       - name: Upload k6 summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: k6-summary
-          path: proyecto-java/target/k6-summary.json
-          if-no-files-found: ignore
+        run: |
+          if [ -f "proyecto-java/target/k6-summary.json" ]; then
+            echo "Uploading k6 summary..."
+            actions/upload-artifact@v4
+            with:
+              name: k6-summary
+              path: proyecto-java/target/k6-summary.json
+          else
+            echo "No k6 summary found."
+          fi
 
       - name: Publish Unit Test Results
         if: always()
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        with:
-          files: proyecto-java/target/surefire-reports/TEST-*.xml
+        run: |
+          if ls proyecto-java/target/surefire-reports/TEST-*.xml 1> /dev/null 2>&1; then
+            echo "Publishing unit test results..."
+            uses: EnricoMi/publish-unit-test-result-action@v2
+            with:
+              files: proyecto-java/target/surefire-reports/TEST-*.xml
+          else
+            echo "No unit test results found."
+          fi
 
       - name: Upload built JAR
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-jar
-          path: proyecto-java/target/*.jar
-          if-no-files-found: ignore
+        run: |
+          if ls proyecto-java/target/*.jar 1> /dev/null 2>&1; then
+            echo "Uploading built JAR..."
+            uses: actions/upload-artifact@v4
+            with:
+              name: app-jar
+              path: proyecto-java/target/*.jar
+          else
+            echo "No built JAR found."
+          fi
