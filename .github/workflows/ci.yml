@@ -12,7 +12,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      pull-requests: write
 
     runs-on: ubuntu-latest
 
@@ -29,12 +28,6 @@ jobs:
 
       - name: Build and test with Maven
         run: mvn -B -ntp clean verify --file proyecto-java/pom.xml
-
-      - name: List target directory contents (Debug)
-        if: always()
-        run: |
-          echo "--- Listing contents of proyecto-java/target ---"
-          ls -R proyecto-java/target 
 
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
@@ -137,68 +130,41 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        run: |
-          if [ -d "proyecto-java/target/surefire-reports" ]; then
-            echo "Uploading test reports..."
-            actions/upload-artifact@v4
-            with:
-              name: surefire-reports
-              path: proyecto-java/target/surefire-reports/**
-          else
-            echo "No test reports found."
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: proyecto-java/target/surefire-reports/**
+          if-no-files-found: ignore
 
       - name: Upload Cucumber report (HTML + JSON)
         if: always()
-        run: |
-          if [ -f "proyecto-java/target/cucumber-report.html" ] || [ -f "proyecto-java/target/cucumber.json" ]; then
-            echo "Uploading Cucumber reports..."
-            actions/upload-artifact@v4
-            with:
-              name: cucumber-reports
-              path: |
-                proyecto-java/target/cucumber-report.html
-                proyecto-java/target/cucumber.json
-                proyecto-java/target/cucumber-html-reports/**
-                proyecto-java/target/cucumber-reports/**
-          else
-            echo "No Cucumber reports found."
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-reports
+          path: |
+            proyecto-java/target/cucumber-report.html
+            proyecto-java/target/cucumber.json
+            proyecto-java/target/cucumber-html-reports/**
+          if-no-files-found: ignore
 
       - name: Upload k6 summary
         if: always()
-        run: |
-          if [ -f "proyecto-java/target/k6-summary.json" ]; then
-            echo "Uploading k6 summary..."
-            actions/upload-artifact@v4
-            with:
-              name: k6-summary
-              path: proyecto-java/target/k6-summary.json
-          else
-            echo "No k6 summary found."
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: proyecto-java/target/k6-summary.json
+          if-no-files-found: ignore
 
       - name: Publish Unit Test Results
         if: always()
-        run: |
-          if ls proyecto-java/target/surefire-reports/TEST-*.xml 1> /dev/null 2>&1; then
-            echo "Publishing unit test results..."
-            uses: EnricoMi/publish-unit-test-result-action@v2
-            with:
-              files: proyecto-java/target/surefire-reports/TEST-*.xml
-          else
-            echo "No unit test results found."
-          fi
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: proyecto-java/target/surefire-reports/TEST-*.xml
 
       - name: Upload built JAR
         if: always()
-        run: |
-          if ls proyecto-java/target/*.jar 1> /dev/null 2>&1; then
-            echo "Uploading built JAR..."
-            uses: actions/upload-artifact@v4
-            with:
-              name: app-jar
-              path: proyecto-java/target/*.jar
-          else
-            echo "No built JAR found."
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: proyecto-java/target/*.jar
+          if-no-files-found: ignore
