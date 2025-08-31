@@ -46,13 +46,7 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- JUNIT 5 SUITE API -->
-    <!-- <dependency>
-      <groupId>org.junit.platform</groupId>
-      <artifactId>junit-platform-suite-api</artifactId>
-      <version>1.9.0</version>
-      <scope>test</scope>
-    </dependency> -->
+    <!-- JUNIT 5 SUITE -->
     <dependency>
       <groupId>org.junit.platform</groupId>
       <artifactId>junit-platform-suite</artifactId>
@@ -118,6 +112,31 @@
         <plugin>
           <artifactId>maven-project-info-reports-plugin</artifactId>
           <version>3.0.0</version>
+        </plugin>
+
+        <!-- Plugin para generar reportes HTML avanzados de Cucumber -->
+        <plugin>
+            <groupId>net.masterthought</groupId>
+            <artifactId>maven-cucumber-reporting</artifactId>
+            <version>5.7.0</version>
+            <executions>
+                <execution>
+                    <id>execution</id>
+                    <phase>verify</phase>
+                    <goals>
+                        <goal>generate</goal>
+                    </goals>
+                    <configuration>
+                        <projectName>proyecto-java</projectName>
+                        <!-- Ruta donde se generará el reporte HTML -->
+                        <outputDirectory>${project.build.directory}/cucumber-html-reports</outputDirectory>
+                        <!-- Ruta donde el plugin buscará los archivos JSON generados por Cucumber -->
+                        <jsonFiles>
+                            <param>${project.build.directory}/cucumber.json</param>
+                        </jsonFiles>
+                    </configuration>
+                </execution>
+            </executions>
         </plugin>
       </plugins>
     </pluginManagement>
