@@ -1,54 +1,162 @@
-name: Java CI with Maven
+name: Java CI with Maven and Performance Tests
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: maven
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
 
-    - name: Build and test with Maven
-      working-directory: ./proyecto-java
-      # run: mvn -B package
-      run: mvn -B -ntp clean verify
+      - name: Build and test with Maven
+        run: mvn -B -ntp clean verify --file proyecto-java/pom.xml
 
-    - name: List target (debug)
-      if: always()
-      run: ls -la ./proyecto-java/target
-    
-    - name: Upload test reports
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: surefire-reports
-        path: proyecto-java/target/surefire-reports/**
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
 
-    - name: Upload Cucumber report (HTML + JSON)
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: cucumber-reports
-        path: |
-          proyecto-java/target/cucumber-report.html
-          proyecto-java/target/cucumber.json
+      - name: Run k6 login performance test
+        continue-on-error: true
+        run: |
+          mkdir -p proyecto-java/target
+          k6 run \
+            --summary-export=proyecto-java/target/k6-summary.json \
+            pruebas-rendimiento/login-test.js
 
-    - name: Upload built JAR
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-jar
-        path: proyecto-java/target/*.jar
+      - name: Generate Pipeline Dashboard (JUnit + Cucumber + k6)
+        if: always()
+        run: |
+          python3 - << 'PY'
+          import json, glob, xml.etree.ElementTree as ET, os
+
+          target = 'proyecto-java/target'
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY', 'summary.txt')
+
+          # -------- JUnit (Surefire) ----------
+          tests=failures=errors=skipped=0; total_time=0.0
+          for f in glob.glob(f'{target}/surefire-reports/TEST-*.xml'):
+              try:
+                  root = ET.parse(f).getroot()
+                  tests     += int(root.attrib.get('tests',0))
+                  failures  += int(root.attrib.get('failures',0))
+                  errors    += int(root.attrib.get('errors',0))
+                  skipped   += int(root.attrib.get('skipped',0))
+                  total_time+= float(root.attrib.get('time',0))
+              except Exception: pass
+
+          # -------- Cucumber (Generado por el plugin de reporting) ----------
+          cuc = dict(features=0, sc_total=0, sc_ok=0, sc_ko=0, st_total=0, st_ok=0, st_ko=0, st_sk=0)
+          cj = f'{target}/cucumber-reports/Cucumber.json'
+          if os.path.isfile(cj):
+              try:
+                  arr = json.load(open(cj, encoding='utf-8'))
+                  cuc['features'] = len(arr)
+                  for feat in arr:
+                      for el in feat.get('elements', []):
+                          if el.get('type')=='scenario':
+                              cuc['sc_total'] += 1
+                              step_stats = [ st.get('result', {}).get('status') for st in el.get('steps',[]) ]
+                              if 'failed' in step_stats: cuc['sc_ko'] += 1
+                              else:                      cuc['sc_ok'] += 1
+                              cuc['st_total'] += len(el.get('steps', []))
+                              for s in step_stats:
+                                  if s=='passed': cuc['st_ok'] += 1
+                                  elif s=='failed': cuc['st_ko'] += 1
+                                  else: cuc['st_sk'] += 1
+              except Exception: pass
+
+          # -------- k6 (Robusto contra valores nulos) ----------
+          k6 = dict(reqs='-', tps='-', p95=0.0, p99=0.0, err_rate=0.0, vus_max='-')
+          ks_path = f'{target}/k6-summary.json'
+          if os.path.isfile(ks_path):
+              try:
+                  ks = json.load(open(ks_path, encoding='utf-8'))
+                  m  = ks.get('metrics', {})
+                  login_trend = m.get('login_response_time', {}).get('values', {})
+                  k6['p95'] = login_trend.get('p(95)', 0.0)
+                  k6['p99'] = login_trend.get('p(99)', 0.0)
+                  k6['reqs'] = int(login_trend.get('count', 0))
+                  run_duration_ms = ks.get('state', {}).get('testRunDurationMs', 0)
+                  k6['tps'] = round(k6['reqs'] / (run_duration_ms / 1000.0), 2) if run_duration_ms else '-'
+                  checks_rate = m.get('checks', {}).get('values', {}).get('rate', 1.0)
+                  k6['err_rate'] = 1.0 - checks_rate
+                  k6['vus_max'] = m.get('vus_max', {}).get('values', {}).get('value', '-')
+              except Exception: pass
+
+          # --- Generación del Dashboard (Versión sin emojis) ---
+          lines = []
+          lines.append('### Pipeline Dashboard')
+          lines.append('')
+          lines.append('---')
+          lines.append('')
+          lines.append('#### Pruebas Funcionales (JUnit)')
+          lines.append(f'- **Tests Totales:** {tests} | **Fallidos:** {failures} | **Errores:** {errors} | **Saltados:** {skipped} | **Tiempo:** {total_time:.2f}s')
+          lines.append('')
+          lines.append('#### Cucumber (BDD)')
+          lines.append(f"- **Features:** {cuc['features']} | **Escenarios:** {cuc['sc_total']} (OK: {cuc['sc_ok']}, Fallidos: {cuc['sc_ko']})")
+          lines.append(f"- **Steps:** {cuc['st_total']} (OK: {cuc['st_ok']}, Fallidos: {cuc['st_ko']}, Saltados: {cuc['st_sk']})")
+          lines.append('')
+          lines.append('#### Performance (k6 - simulación de login)')
+          lines.append(f"- **Iteraciones:** {k6['reqs']} | **TPS (aprox):** {k6['tps']} iter/s")
+          lines.append(f"- **Latencia p(95):** {k6['p95']:.2f} ms | **p(99):** {k6['p99']:.2f} ms")
+          lines.append(f"- **Tasa de Error:** {k6['err_rate']:.2%}")
+          lines.append(f"- **VUs Máximos:** {k6['vus_max']}")
+          out = '\n'.join(lines)
+          
+          with open(summary_file, 'a', encoding='utf-8') as f:
+              f.write(out + '\n')
+          PY
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: proyecto-java/target/surefire-reports/**
+          if-no-files-found: ignore
+
+      - name: Upload Cucumber report (HTML + JSON)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-reports
+          path: |
+            proyecto-java/target/cucumber-report.html
+            proyecto-java/target/cucumber.json
+            proyecto-java/target/cucumber-html-reports/**
+          if-no-files-found: ignore
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: proyecto-java/target/k6-summary.json
+          if-no-files-found: ignore
+
+      - name: Publish Unit Test Results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: proyecto-java/target/surefire-reports/TEST-*.xml
+
+      - name: Upload built JAR
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: proyecto-java/target/*.jar
+          if-no-files-found: ignore
