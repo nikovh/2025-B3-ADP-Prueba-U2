@@ -108,25 +108,41 @@ jobs:
               except Exception:
                   pass
 
-          # -------- k6 (métricas estándar) ----------
+          # -------- k6 (SOLO métricas personalizadas del script) ----------
           k6 = dict(reqs='-', tps='-', p95='-', p99='-', err='-', vus_max='-')
           ks_path = f'{target}/k6-summary.json'
           if os.path.isfile(ks_path):
               try:
                   ks = json.load(open(ks_path, encoding='utf-8'))
                   m  = ks.get('metrics', {})
-                  dur = m.get('http_req_duration', {})
-                  vals = dur.get('values') or {}
-                  percs = dur.get('percentiles') or {}
-                  def val(k): return vals.get(k) or percs.get(k)
-                  k6['p95'] = val('p(95)')
-                  k6['p99'] = val('p(99)')
-                  http_reqs = m.get('http_reqs', {})
-                  k6['reqs'] = int((http_reqs.get('count') or 0))
-                  dur_ms = (ks.get('state') or {}).get('testRunDurationMs') or 0
-                  k6['tps'] = round(k6['reqs']/ (dur_ms/1000.0), 2) if dur_ms else '-'
-                  err = (m.get('http_req_failed') or {}).get('rate')
-                  k6['err'] = err if err is not None else '-'
+
+                  # Trend: login_response_time
+                  lrt = m.get('login_response_time', {})
+                  vals = (lrt.get('values') or {})
+                  percs = lrt.get('percentiles') or {}
+                  def v(k): return vals.get(k) or percs.get(k)
+                  k6['p95'] = v('p(95)')
+                  k6['p99'] = v('p(99)')
+
+                  # Rate: login_checks (éxito); err = 1 - value
+                  lch = m.get('login_checks', {})
+                  val = lch.get('value')
+                  if val is None:
+                      val = (lch.get('values') or {}).get('value')
+                  if val is not None:
+                      k6['err'] = 1.0 - float(val)
+
+                  # Counter: login_iterations (para reqs y TPS)
+                  lit = m.get('login_iterations', {})
+                  count = lit.get('count')
+                  if count is None:
+                      count = (lit.get('values') or {}).get('count')
+                  if isinstance(count, (int, float)):
+                      k6['reqs'] = int(count)
+                      dur_ms = (ks.get('state') or {}).get('testRunDurationMs') or 0
+                      k6['tps']  = round(count / (dur_ms/1000.0), 2) if dur_ms else '-'
+
+                  # (opcional) VUs máximos si existe
                   vus_max = m.get('vus_max', {})
                   k6['vus_max'] = (vus_max.get('values') or {}).get('value') or vus_max.get('value') or '-'
               except Exception:
@@ -142,10 +158,10 @@ jobs:
           lines.append(f"- Features: {cuc['features']} | Escenarios: {cuc['sc_total']} (OK {cuc['sc_ok']}, Fallidos {cuc['sc_ko']})")
           lines.append(f"- Steps: {cuc['st_total']} (OK {cuc['st_ok']}, Fallidos {cuc['st_ko']}, Skipped {cuc['st_sk']})")
           lines.append('')
-          lines.append('#### Performance (k6 – login)')
-          lines.append(f"- Peticiones: {k6['reqs']} | TPS aprox: {k6['tps']} req/s")
+          lines.append('#### Performance (k6 – simulación de login)')
+          lines.append(f"- Iteraciones: {k6['reqs']} | TPS aprox: {k6['tps']} iter/s")
           lines.append(f"- Latencia p95: {k6['p95']} ms | p99: {k6['p99']} ms")
-          lines.append(f"- Error rate: {k6['err']}")
+          lines.append(f"- Tasa de Error: {k6['err']}")
           lines.append(f"- VUs max: {k6['vus_max']}")
           out = '\n'.join(lines)
           with open(summary_file, 'a', encoding='utf-8') as f:
