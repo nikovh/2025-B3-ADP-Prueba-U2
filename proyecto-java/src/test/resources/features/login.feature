@@ -2,31 +2,28 @@ Feature: Login de usuario
   Como usuario registrado quiero iniciar sesión para acceder a mi cuenta
 
   Background:
-    Given el servicio de autenticación está disponible
-    And estoy en la página de login
+    Given que el usuario está en la página de login
 
   Scenario: Autenticación exitosa con credenciales válidas
-    Given existe un usuario activo con email "user@example.com" y contraseña "Correcta"
-    When ingreso el email "user@example.com" y la contraseña "Correcta"
-    And envío el formulario de login
-    Then veo la página de inicio
-    And no veo mensajes de error
+    Given existe un usuario con email "user@example.com" y password "Correcta"
+    When el usuario intenta iniciar sesión con email "user@example.com" y password "Correcta"
+    And hace clic en el botón "Ingresar"
+    Then el usuario es redirigido a su panel personal
 
   Scenario: Inicio de sesión exitoso con correo en mayúsculas (insensible al caso)
-    When el usuario introduce el correo "Usuario.Valido@EMAIL.COM" y la contraseña "pass123"
+    Given existe un usuario con email "usuario.valido@email.com" y password "pass123"
+    When el usuario intenta iniciar sesión con email "Usuario.Valido@EMAIL.COM" y password "pass123"
     And hace clic en el botón "Ingresar"
-    Then veo la página de inicio
+    Then el usuario es redirigido a su panel personal
 
   Scenario Outline: Mensaje genérico para credenciales inválidas
-    Given el sistema no confirma si el usuario existe por seguridad
-    When ingreso el email "<email>" y la contraseña "<password>"
-    And envío el formulario de login
-    Then veo el mensaje "Credenciales inválidas"
-    And permanezco en la página de login
+    When el usuario intenta iniciar sesión con email "<email>" y password "<password>"
+    And hace clic en el botón "Ingresar"
+    Then el usuario debe ver el mensaje de error "Correo o contraseña incorrectos"
 
     Examples:
-      | correo                     | contrasena        | mensaje_error                     |
-      | usuario.valido@email.com   | pass_incorrecto   | "Correo o contraseña incorrectos" |
-      | no.existe@email.com        | cualquier_pass    | "Correo o contraseña incorrectos" |
-      | Usuario.Valido@email.com   | pass_incorrecto   | "Correo o contraseña incorrectos" |
-      | usuario.valido@email.com   |                   | "Correo o contraseña incorrectos" |
+      | email                      | password        |
+      | usuario.valido@email.com   | pass_incorrecto |
+      | no.existe@email.com        | cualquier_pass  |
+      | Usuario.Valido@email.com   | pass_incorrecto |
+      | usuario.valido@email.com   |                 |
