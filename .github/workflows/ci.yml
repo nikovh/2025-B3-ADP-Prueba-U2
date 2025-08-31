@@ -30,6 +30,12 @@ jobs:
       - name: Build and test with Maven
         run: mvn -B -ntp clean verify --file proyecto-java/pom.xml
 
+      - name: List target directory contents (Debug)
+        if: always()
+        run: |
+          echo "--- Listing contents of proyecto-java/target ---"
+          ls -R proyecto-java/target 
+
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
 

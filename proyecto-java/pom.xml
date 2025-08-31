@@ -69,7 +69,34 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
       </plugin>
-      <!-- Otros plugins básicos -->
+
+      <!-- Plugin para generar reportes HTML avanzados de Cucumber -->
+      <plugin>
+          <groupId>net.masterthought</groupId>
+          <artifactId>maven-cucumber-reporting</artifactId>
+          <version>5.7.0</version>
+          <executions>
+              <execution>
+                  <id>execution</id>
+                  <phase>verify</phase>
+                  <goals>
+                      <goal>generate</goal>
+                  </goals>
+                  <configuration>
+                      <projectName>proyecto-java</projectName>
+                      <!-- Ruta donde se generará el reporte HTML -->
+                      <outputDirectory>${project.build.directory}/cucumber-html-reports</outputDirectory>
+                      <!-- El plugin crea esta carpeta y el JSON consolidado dentro -->
+                      <jsonOutputDirectory>${project.build.directory}/cucumber-reports</jsonOutputDirectory>
+                      <!-- Ruta donde el plugin buscará los archivos JSON generados por Cucumber -->
+                      <jsonFiles>
+                          <param>${project.build.directory}/cucumber.json</param>
+                      </jsonFiles>
+                  </configuration>
+              </execution>
+          </executions>
+      </plugin>
+
     </plugins>
 
     <pluginManagement>
@@ -112,31 +139,6 @@
         <plugin>
           <artifactId>maven-project-info-reports-plugin</artifactId>
           <version>3.0.0</version>
-        </plugin>
-
-        <!-- Plugin para generar reportes HTML avanzados de Cucumber -->
-        <plugin>
-            <groupId>net.masterthought</groupId>
-            <artifactId>maven-cucumber-reporting</artifactId>
-            <version>5.7.0</version>
-            <executions>
-                <execution>
-                    <id>execution</id>
-                    <phase>verify</phase>
-                    <goals>
-                        <goal>generate</goal>
-                    </goals>
-                    <configuration>
-                        <projectName>proyecto-java</projectName>
-                        <!-- Ruta donde se generará el reporte HTML -->
-                        <outputDirectory>${project.build.directory}/cucumber-html-reports</outputDirectory>
-                        <!-- Ruta donde el plugin buscará los archivos JSON generados por Cucumber -->
-                        <jsonFiles>
-                            <param>${project.build.directory}/cucumber.json</param>
-                        </jsonFiles>
-                    </configuration>
-                </execution>
-            </executions>
         </plugin>
       </plugins>
     </pluginManagement>
