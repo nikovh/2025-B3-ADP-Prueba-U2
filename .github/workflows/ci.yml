@@ -58,6 +58,13 @@ jobs:
           python3 - << 'PY'
           import json, glob, xml.etree.ElementTree as ET, os
 
+          # --- Función de ayuda para formateo seguro ---
+          def format_float(val, suffix=''):
+              return f"{val:.2f}{suffix}" if isinstance(val, (int, float)) else '-'
+
+          def format_percent(val):
+              return f"{val:.2%}" if isinstance(val, (int, float)) else '-'
+
           target = 'proyecto-java/target'
           summary_file = os.environ.get('GITHUB_STEP_SUMMARY', 'summary.txt')
 
@@ -158,7 +165,7 @@ jobs:
           lines.append(f"- Features: {cuc['features']} | Escenarios: {cuc['sc_total']} (OK {cuc['sc_ok']}, Fallidos {cuc['sc_ko']})")
           lines.append(f"- Steps: {cuc['st_total']} (OK {cuc['st_ok']}, Fallidos {cuc['st_ko']}, Skipped {cuc['st_sk']})")
           lines.append('')
-          lines.append('#### Performance (k6 – simulación de login)')
+          lines.append('#### Performance (k6 - simulación de login)')
           lines.append(f"- Iteraciones: {k6['reqs']} | TPS aprox: {k6['tps']} iter/s")
           lines.append(f"- Latencia p95: {k6['p95']} ms | p99: {k6['p99']} ms")
           lines.append(f"- Tasa de Error: {k6['err']}")
