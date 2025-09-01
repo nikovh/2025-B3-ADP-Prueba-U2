@@ -73,7 +73,7 @@ El pipeline proporciona visibilidad de la calidad del código a través de vario
 
 El resultado más inmediato es el dashboard generado en el resumen de cada ejecución de GitHub Actions. Ofrece una vista consolidada del estado de la aplicación.
 
-![Dashboard del Pipeline](https://imgur.com/a/6TKqQCZ)
+![Dashboard del Pipeline](https://i.imgur.com/55SOFZi.png)
 
 ### Artefactos Detallados
 
