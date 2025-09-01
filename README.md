@@ -45,12 +45,59 @@ El proyecto utiliza Maven para gestionar el ciclo de vida de la construcción y 
     Si todas las pruebas son exitosas, verás un mensaje de `[INFO] BUILD SUCCESS` en la consola.
 
 
-##  Pipeline de Integración Continua (CI)
+## El Flujo de Integración Continua (CI)
 
-Este repositorio está configurado con un pipeline de GitHub Actions que se ejecuta automáticamente en cada `push` a las ramas `main` y `develop`.
+El archivo `.github/workflows/ci.yml` define un pipeline que ejecuta los siguientes pasos en secuencia:
 
-El pipeline realiza las siguientes tareas:
-1.  Configura un entorno de ejecución con Java 11.
-2.  Compila el código fuente.
-3.  Ejecuta el set completo de pruebas unitarias.
-4.  Publica los reportes de prueba como un artefacto descargable para su revisión.
+1.  **Activación (Trigger):** El flujo de trabajo se inicia con un `push` o `pull_request` a las ramas `main` o `develop`.
+2.  **Checkout del Código:** Se clona la versión más reciente del repositorio.
+3.  **Configuración del Entorno:** Se instala y configura el JDK 11 y Maven con caché para acelerar las ejecuciones futuras.
+4.  **Compilación y Pruebas:** Se ejecuta el comando `mvn clean verify`. Este comando se encarga de:
+    *   Limpiar compilaciones anteriores.
+    *   Compilar el código fuente.
+    *   Ejecutar las **pruebas unitarias** de JUnit.
+    *   Ejecutar las **pruebas BDD** de Cucumber.
+    *   Generar los reportes XML de Surefire y los reportes JSON/HTML de Cucumber.
+    *   Empaquetar la aplicación en un archivo `.jar`.
+5.  **Pruebas de Rendimiento:** Se ejecuta el script de k6 para simular la carga y se exporta un resumen en formato JSON.
+6.  **Generación del Dashboard:** Un script de Python lee todos los reportes generados (JUnit, Cucumber, k6) y construye un dashboard en formato Markdown que se publica en el resumen del job.
+7.  **Publicación de Artefactos:** Se guardan todos los reportes detallados (Surefire, Cucumber HTML, k6 JSON) y el archivo `.jar` compilado como artefactos descargables para un análisis posterior.
+8.  **Notificación de Fallos:** Si cualquiera de los pasos anteriores falla, se activa un paso final que envía una alerta detallada al canal de Slack configurado.
+
+
+## Resultados y Reportes
+
+El pipeline proporciona visibilidad de la calidad del código a través de varios mecanismos.
+
+### Dashboard del Pipeline
+
+El resultado más inmediato es el dashboard generado en el resumen de cada ejecución de GitHub Actions. Ofrece una vista consolidada del estado de la aplicación.
+
+![Dashboard del Pipeline](https://imgur.com/a/6TKqQCZ)
+
+### Artefactos Detallados
+
+Para un análisis más profundo, los siguientes reportes se pueden descargar desde la sección "Artifacts" de la ejecución:
+
+*   **`surefire-reports`:** Contiene los resultados de las pruebas unitarias en formato XML.
+*   **`cucumber-reports`:** Incluye el reporte HTML navegable de Cucumber, ideal para que stakeholders no técnicos revisen los escenarios ejecutados.
+*   **`k6-summary`:** El reporte JSON con todas las métricas detalladas de la prueba de rendimiento.
+*   **`app-jar`:** El archivo `.jar` ejecutable de la aplicación.
+
+
+### Alertas Automáticas
+
+En caso de un fallo, se envía una notificación proactiva a Slack, permitiendo al equipo identificar y solucionar el problema rápidamente.
+
+
+## Cómo Ejecutar Localmente
+
+Para ejecutar las pruebas en un entorno local, asegúrate de tener los siguientes prerrequisitos:
+
+*   Java 11 (JDK)
+*   Apache Maven
+*   k6 (Opcional, para las pruebas de rendimiento)
+
+Ejecuta el siguiente comando desde la raíz del repositorio para correr las pruebas unitarias y de BDD:
+
+mvn -B -ntp clean verify --file proyecto-java/pom.xml
